@@ -69,6 +69,13 @@ int main(int argc , char * argv[])
 
 	struct sockaddr_in listensock , connectsock;
 	int port;
+	char work_dir[]="/home/bikli/project";
+	if(chdir(work_dir)==-1)
+	{
+		printf("open work dir error\n");
+		return 0;
+	}
+	printf("work dir = %s\n",get_current_dir_name());
 	ThreadPoll threadpoll(10);
 	threadpoll.add_key("user_success");
 	threadpoll.add_key("pass_success");
@@ -302,19 +309,50 @@ void command_pwd (int fd , char * args , ThreadPoll * p)
 void command_cwd(int fd , char * args , ThreadPoll * p)
 {
 	char * path = (char *)p->get_value("dir");
-	char buf[255];
+	char buf[255],tmp[255];
+	bzero(tmp,255);
+	strcpy(tmp,path);
 	printf("command_cwd function\n");
-	if(!chdir(args))
+	if(strcmp(args,"..")==0)
 	{
+		int num=0,i=0;
+		while(path[i])
+		{
+			if(path[i]=='/')
+			{
+				num = i;
+			}
+			i++;
+		}
+		strncpy(buf , path , num);
+		buf[num]='\0';
+		printf(".. = %s\n",buf);
+	}else if(strcmp(args,".")==0)
+	{
+		strcpy(buf,path);
+	}else if(args[0]=='/')
+	{
+		sprintf(buf , "%s" , args);
+	}else
+	{
+		sprintf(buf , "%s/%s" , path , args);
+		printf("=====%s\n" , buf);
+	}
+	if(opendir(buf))
+	{
+		printf("change dir = %s\n",buf);
 		//getcwd(path,255);
-		bzero(path,255);
-		strcpy(path,args);
+		bzero(path , 255);
+		strcpy(path , buf);
+		bzero(buf , 255);
 		sprintf(buf , "257 %s\r\n" , path);
 		write(fd , buf , strlen(buf));
 	}
 	else
 	{
 		write(fd , res_directory , strlen(res_directory));
+		bzero(path,255);
+		strcpy(path,tmp);
 	}
 }
 
@@ -375,10 +413,14 @@ void command_list(int fd , char * args , ThreadPoll * p)
 	}
 
 	//getcwd(path,255);
+	printf("port path = %s\n",path);
 	dir = opendir(path);
+	char file_path[255];
 	while(dirent=readdir(dir))
 	{
-		lstat(dirent->d_name,&st);
+		bzero(file_path,255);
+		sprintf(file_path , "%s/%s" , path , dirent->d_name);	
+		lstat(file_path , &st);
 		if(S_ISDIR(st.st_mode))
 		{
 			mode='d';
@@ -415,6 +457,7 @@ void command_retr(int fd , char * args , ThreadPoll * p)
 	int clientfd;
 	char * trans_addr = (char *)p->get_value("trans_addr");
 	int * trans_port = (int *)p->get_value("trans_port");
+	char * path = (char *)p->get_value("dir");
 
 	printf("command_retr function\n");
 	write(fd , res_transmission , strlen(res_transmission));
@@ -433,7 +476,9 @@ void command_retr(int fd , char * args , ThreadPoll * p)
 		printf("data connect error %d\n",errno);
 		return ;
 	}
-	file = fopen(args , "rb");	
+	char file_path[255];
+	sprintf(file_path , "%s/%s" , path , args);
+	file = fopen(file_path , "rb");	
 	if(file)
 	{
 		while((file_len = fread(buf , sizeof(char) , BUFFSIZE , file))>0)
@@ -460,7 +505,8 @@ void command_stor(int fd , char * args , ThreadPoll * p)
 	int clientfd;
 	char * trans_addr = (char *)p->get_value("trans_addr");
 	int * trans_port = (int *)p->get_value("trans_port");
-	
+	char * path = (char *)p->get_value("dir");
+
 	printf("command_stor function\n");
 	write(fd , res_transmission , strlen(res_transmission));
 	if((clientfd = socket(AF_INET,SOCK_STREAM,0))<0)
@@ -478,7 +524,9 @@ void command_stor(int fd , char * args , ThreadPoll * p)
 		printf("data connect error %d\n",errno);
 		return ;
 	}
-	file = fopen(args , "wb");	
+	char file_path[255];
+	sprintf(file_path , "%s/%s" , path , args);
+	file = fopen(file_path , "wb");	
 	if(file)
 	{
 		while(getfile_len = read(clientfd , buf , BUFFSIZE))
